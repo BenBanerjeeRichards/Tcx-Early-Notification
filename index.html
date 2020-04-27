@@ -13,29 +13,98 @@
     <script src="script.js"></script>
 
     <style>
-        #map {
+        html, body {
+            height: 100%;
+            font-family: Helvetica, serif;
+        }
+
+        #container {
+            height: 100%;
             width: 80%;
-            height: 500px;
+            margin: 0 auto;
+        }
+
+        #head {
+            height: 25%;
+        }
+
+        #map {
+            width: 100%;
+            height: 65%;
             float: right;
         }
 
         #controls {
             float: left;
+            border: 1px solid;
+            padding: 1%;
+            margin-bottom: 5px;
+            width: 98%;
+        }
+
+
+        #downloadBtn {
+            font-size: 15px;
+            margin-left: 20px;
+        }
+
+        footer {
+            position: absolute;
+            bottom: 2%;
+            right: 10%;
+            font-size: 14px;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        #error {
+            font-weight: bold;
+            color: red;
         }
     </style>
 </head>
 <body>
+<div id="container">
+    <div id="head">
+        <h1>Notify before turn</h1>
+        <p>
+            Cycle computer notifiying turns too late? This tool makes them come up earlier.
+            It's like 'Notify before turn' in ridewithGPS, but without the monthly fee.
+        </p>
+        <p>
+            Upload the TCX below, select how early you wish notifications to appear,
+            and then hit Download. All processing is done in your browser - your file doesn't leave your computer and
+            is not stored by this service. <strong>Files exported from Strava will not work</strong> - complain <a
+                href="https://support.strava.com/hc/en-us/community/posts/208835817-Turn-by-turn-cues-for-following-Routes-on-a-Garmin"
+                target="_blank">here</a> and
+            <a href="https://support.strava.com/hc/en-us/community/posts/115000362070-Turn-By-Turn-Notifications-For-Wahoo-Bolt"
+               target="_blank">here</a>
+        </p>
 
-    <div id="controls">
-        TCX File:
-        <input type="file" id="file">
+
+        <div id="error">
+        </div>
+
+
+        <div id="controls">
+            Upload .TCX:
+            <input type="file" id="file">
+            Notify this early: <input type="range" id="distanceRange" min="10" max="1000" value="200" step="10">
+            <span id="distanceOutput">?</span> ft (<span id="distanceOutputMetric">?</span> m)
+
+            <button id="downloadBtn">Download</button>
+        </div>
+
     </div>
-
-    <input type="range" id="distanceRange" min="10" max="1000" value="200" step="10">
-    <span id="distanceOutput">?</span> ft (<span id="distanceOutputMetric">?</span> m)
-    
     <div id="map">
-
     </div>
+    <footer>
+        Ben Banerjee-Richards | <a href="https://github.com/BenBanerjeeRichards/Tcx-Early-Notification/issues/new">Report
+        Issue</a>
+    </footer>
+</div>
+
 </body>
 </html>

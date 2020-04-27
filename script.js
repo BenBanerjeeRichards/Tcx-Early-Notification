@@ -1,9 +1,12 @@
-
 var map;
+var mapLayerGroup;
+var newGroup;
+var oldGroup;
 var tcxContents = {
     "coursePoints": [],
     "trackPoints": [],
-    "xmlDoc": undefined
+    "xmlDoc": undefined,
+    "newCoursePoints": undefined
 };
 
 
@@ -16,41 +19,60 @@ var redIcon = new L.Icon({
     shadowSize: [41, 41]
 });
 
+function error(msg) {
+    document.getElementById("error").innerText = msg;
+}
+
+function clearError() {
+    error("");
+}
 
 function onFileUploaded(evt) {
+    clearError();
     var file = evt.target.files[0];
+    var path = evt.target.value;
+    tcxContents["fileName"] = path.split("\\").pop();
+
     var reader = new FileReader();
-    reader.onload = function(theFile) {
-        return function(e) {
+    reader.onload = function (theFile) {
+        return function (e) {
             var xml = e.target.result;
             parser = new DOMParser();
             xmlDoc = parser.parseFromString(xml, "text/xml");
-            loadTcxFile(xmlDoc);
-            addBaseMarkersWithRoute();
-            computeDistanceMarkers();
+            if (loadTcxFile(xmlDoc)) {
+                addBaseMarkersWithRoute();
+                computeDistanceMarkers();
+            }
         }
     }(file);
     reader.readAsText(file)
 }
 
-function downloadAsFile(filename, text) {
-    var element = document.createElement('a');
-    element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
-    element.setAttribute('downloadAsFile', filename);
-
-    element.style.display = 'none';
-    document.body.appendChild(element);
-
-    element.click();
-
-    document.body.removeChild(element);
+function downloadAsFile(filename, data) {
+    var blob = new Blob([data], {type: 'text/csv'});
+    if (window.navigator.msSaveOrOpenBlob) {
+        window.navigator.msSaveBlob(blob, filename);
+    } else {
+        var elem = window.document.createElement('a');
+        elem.href = window.URL.createObjectURL(blob);
+        elem.download = filename;
+        document.body.appendChild(elem);
+        elem.click();
+        document.body.removeChild(elem);
+    }
 }
+
 
 function loadTcxFile(xmlDoc) {
     var coursePointsXml = Array.prototype.slice.call(xmlDoc.getElementsByTagName("CoursePoint"));
     var coursePoints = [];
 
-    coursePointsXml.forEach(function(coursePoint) {
+    if (coursePointsXml.length === 0) {
+        error("Error: no cue sheet found in file. Tip: use ridewithgps.com to generate one. Strava not supported.")
+        return false;
+    }
+
+    coursePointsXml.forEach(function (coursePoint) {
         var posXml = coursePoint.childNodes[5];
         var lat = parseFloat(posXml.getElementsByTagName("LatitudeDegrees")[0].textContent);
         var long = parseFloat(posXml.getElementsByTagName("LongitudeDegrees")[0].textContent);
@@ -69,7 +91,12 @@ function loadTcxFile(xmlDoc) {
     var points = [];
     var currentCoursePointIdx = 0;
 
-    trackPointsXml.forEach(function(trackPoint, i) {
+    if (trackPointsXml.length === 0) {
+        error("Error: No route found in file");
+        return false;
+    }
+
+    trackPointsXml.forEach(function (trackPoint, i) {
         var latPart = trackPoint.childNodes[3].getElementsByTagName("LatitudeDegrees");
         var longPart = trackPoint.childNodes[3].getElementsByTagName("LongitudeDegrees");
         var lat = parseFloat(latPart[0].textContent);
@@ -102,21 +129,26 @@ function loadTcxFile(xmlDoc) {
     tcxContents["coursePoints"] = coursePoints;
     tcxContents["trackPoints"] = points;
     tcxContents["xmlDoc"] = xmlDoc;
+
+    return true;
 }
 
 function addBaseMarkersWithRoute() {
     var coursePoints = tcxContents["coursePoints"];
     var trackPoints = tcxContents["trackPoints"];
+    var courseMarkers = [];
 
-    coursePoints.forEach(function(point) {
-        L.marker([point["lat"], point["long"]]).addTo(map)
-            .bindPopup(point["instruction"])
-            .openPopup();
+    coursePoints.forEach(function (point) {
+        courseMarkers.push(L.marker([point["lat"], point["long"]])
+            .bindPopup(point["instruction"]))
     });
 
+    var courseMarkerGroup = L.layerGroup(courseMarkers);
+    oldGroup = map.addLayer(courseMarkerGroup);
+    // mapLayerGroup.addOverlay(courseMarkerGroup, "original");
 
     var points = [];
-    trackPoints.forEach(function(trackPoint) {
+    trackPoints.forEach(function (trackPoint) {
         points.push(new L.LatLng(trackPoint["lat"], trackPoint["long"]));
     });
 
@@ -138,16 +170,23 @@ function updateDistanceRangeDisplay() {
 
 function computeDistanceMarkers() {
     if (tcxContents === undefined) return;
+    if (newGroup !== undefined) {
+        console.log("Removing ", newGroup);
+        map.removeLayer(newGroup);
+    }
+
     var earlyDistance = (document.getElementById("distanceRange").value * 0.3048);        // temp for now, includes ft->m conversion
 
     var newCoursePointLocations = {};
     var coursePoints = tcxContents["coursePoints"];
     var trackPoints = tcxContents["trackPoints"];
 
+    var newCourseMarkers = [];
+
     // Now add markers for new points
-    coursePoints.forEach(function(coursePoint, i) {
+    coursePoints.forEach(function (coursePoint, i) {
         // Generic nodes are not navigation nodes
-        if (coursePoint["node"] !== "Generic" ) {
+        if (coursePoint["node"] !== "Generic") {
             // Calculate previous point
             // Go back distance if possible, otherwise
             var pointIdx = coursePoint["pointIndex"];
@@ -170,24 +209,29 @@ function computeDistanceMarkers() {
             }
             var newTrackPoint = trackPoints[newPointIndex];
             var newPoint = new L.LatLng(newTrackPoint["lat"], newTrackPoint["long"]);
-            L.marker(newPoint, {"icon": redIcon}).addTo(map)
-                .bindPopup(coursePoint["instruction"])
-                .openPopup();
+            newCourseMarkers.push(L.marker(newPoint, {"icon": redIcon})
+                .bindPopup(coursePoint["instruction"]));
 
             newCoursePointLocations[coursePoint["time"]] = newPoint;
         }
     });
 
-    console.log(newCoursePointLocations);
+    tcxContents["newCoursePoints"] = newCourseMarkers;
 
+    var courseMarkerGroup = L.layerGroup(newCourseMarkers);
+    newGroup = courseMarkerGroup;
+    map.addLayer(courseMarkerGroup);
+    // mapLayerGroup.addOverlay(courseMarkerGroup, "New");
+
+    console.log(newCoursePointLocations);
 }
 
 function writeAndDownloadNewTcx(newCoursePointLocations) {
     // Now alter XML
     var xmlDoc = tcxContents["xmlDoc"];
     var coursePointsXml = Array.prototype.slice.call(xmlDoc.getElementsByTagName("CoursePoint"));
-    coursePointsXml.forEach(function(coursePointXml) {
-        var time  = coursePointXml.childNodes[3].textContent;
+    coursePointsXml.forEach(function (coursePointXml) {
+        var time = coursePointXml.childNodes[3].textContent;
         if (newCoursePointLocations[time] !== undefined) {
             // Update actual position
             coursePointXml.childNodes[5].getElementsByTagName("LatitudeDegrees")[0].textContent = newCoursePointLocations[time].lat;
@@ -196,16 +240,18 @@ function writeAndDownloadNewTcx(newCoursePointLocations) {
     });
 
     var newXmlString = new XMLSerializer().serializeToString(xmlDoc.documentElement);
-    downloadAsFile("Fixed.tcx", newXmlString);
+    downloadAsFile(tcxContents["fileName"].replace(".tcx", "") + "_EarlyTurnNotif.tcx", newXmlString);
 }
 
-window.onload = function() {
+window.onload = function () {
     // Center map over UK
-    map = L.map('map').setView([54.505, -0.09], 5);
+    map = L.map('map').setView([55.5, -0.09], 5);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
+
+    mapLayerGroup = L.control.layers(null, {}).addTo(map);
 
     document.getElementById('file').addEventListener('change', onFileUploaded, false);
 
@@ -213,5 +259,10 @@ window.onload = function() {
     slider.oninput = updateDistanceRangeDisplay;
     slider.onchange = computeDistanceMarkers;
     updateDistanceRangeDisplay();
-    // computeDistanceMarkers();
+
+    document.getElementById("downloadBtn").onclick = function () {
+        if (tcxContents["newCoursePoints"] !== undefined) {
+            writeAndDownloadNewTcx(tcxContents["newCoursePoints"])
+        }
+    }
 };
