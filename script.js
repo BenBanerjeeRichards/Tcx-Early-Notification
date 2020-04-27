@@ -40,6 +40,7 @@ function onFileUploaded(evt) {
             parser = new DOMParser();
             xmlDoc = parser.parseFromString(xml, "text/xml");
             if (loadTcxFile(xmlDoc)) {
+                tcxContents["xmlDoc"] = xmlDoc;
                 addBaseMarkersWithRoute();
                 computeDistanceMarkers();
             }
@@ -128,7 +129,6 @@ function loadTcxFile(xmlDoc) {
 
     tcxContents["coursePoints"] = coursePoints;
     tcxContents["trackPoints"] = points;
-    tcxContents["xmlDoc"] = xmlDoc;
 
     return true;
 }
@@ -190,7 +190,6 @@ function computeDistanceMarkers() {
             // Calculate previous point
             // Go back distance if possible, otherwise
             var pointIdx = coursePoint["pointIndex"];
-            var distancePack = 0;
             var prevPointIndex = i === 0 ? undefined : coursePoints[i - 1]["pointIndex"];
             var initDistance = trackPoints[pointIdx]["distance"];
             // First consider case where previous turn is within distance
@@ -209,24 +208,24 @@ function computeDistanceMarkers() {
             }
             var newTrackPoint = trackPoints[newPointIndex];
             var newPoint = new L.LatLng(newTrackPoint["lat"], newTrackPoint["long"]);
-            newCourseMarkers.push(L.marker(newPoint, {"icon": redIcon})
-                .bindPopup(coursePoint["instruction"]));
-
+            var newMarker = L.marker(newPoint, {"icon": redIcon})
+                .bindPopup(coursePoint["instruction"]);
+            newCourseMarkers.push(newMarker);
             newCoursePointLocations[coursePoint["time"]] = newPoint;
         }
     });
 
-    tcxContents["newCoursePoints"] = newCourseMarkers;
+    tcxContents["newCoursePoints"] = newCoursePointLocations;
 
     var courseMarkerGroup = L.layerGroup(newCourseMarkers);
     newGroup = courseMarkerGroup;
     map.addLayer(courseMarkerGroup);
     // mapLayerGroup.addOverlay(courseMarkerGroup, "New");
 
-    console.log(newCoursePointLocations);
 }
 
 function writeAndDownloadNewTcx(newCoursePointLocations) {
+    console.log("newCoursePointLocations", newCoursePointLocations);
     // Now alter XML
     var xmlDoc = tcxContents["xmlDoc"];
     var coursePointsXml = Array.prototype.slice.call(xmlDoc.getElementsByTagName("CoursePoint"));
